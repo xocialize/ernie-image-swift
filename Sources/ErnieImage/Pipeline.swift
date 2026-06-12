@@ -6,6 +6,7 @@ import Foundation
 import Lens
 import MLX
 import MLXRandom
+import Foundation
 import Tokenizers
 
 public final class ErnieImageGenerator {
@@ -52,7 +53,20 @@ public final class ErnieImageGenerator {
         }
 
         // Lens Flux2VAE: bn de-norm in packed space + unpatchify + decode.
-        let decoded = vae.decodePackedLatents(latents.asType(.float32))  // (B,3,H,W)
+        if ProcessInfo.processInfo.environment["ERNIE_MEM_TRACE"] == "1" {
+            eval(latents)
+            print("[mem] pre-decode peak \(GPU.peakMemory / 1_000_000) MB")
+            GPU.resetPeakMemory()
+        }
+        // bf16 decode matches the Python reference (mflux runs the Flux2 VAE bf16
+        // internally) and cuts the decode high-water ~2x vs fp32 — the lever that
+        // fits the 4-bit variant on lower-tier working sets. bn de-norm stays fp32
+        // inside the VAE (loadVAE pins bn stats fp32).
+        let decoded = vae.decodePackedLatents(latents)  // (B,3,H,W)
+        if ProcessInfo.processInfo.environment["ERNIE_MEM_TRACE"] == "1" {
+            eval(decoded)
+            print("[mem] decode-only peak \(GPU.peakMemory / 1_000_000) MB")
+        }
         let img = clip((decoded + 1) * 127.5, min: 0, max: 255).asType(.uint8)
         let hwc = img[0].transposed(1, 2, 0)
         eval(hwc)
