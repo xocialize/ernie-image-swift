@@ -15,13 +15,17 @@ let package = Package(
         .macOS(.v26)
     ],
     products: [
-        .library(name: "ErnieImage", targets: ["ErnieImage"])
+        .library(name: "ErnieImage", targets: ["ErnieImage"]),
+        // MLXEngine wrapper: the second `textToImage` backer (PackageID "ernie-image-turbo").
+        .library(name: "MLXErnieImage", targets: ["MLXErnieImage"]),
     ],
     dependencies: [
         .package(url: "https://github.com/ml-explore/mlx-swift.git", from: "0.30.0"),
         .package(url: "https://github.com/huggingface/swift-transformers", from: "1.1.6"),
         // Flux2VAE (decoder) — parity-locked in the Lens port; reused as-is.
         .package(path: "../lens-mlx-swift"),
+        // MLXEngine contract (MLXToolKit) for the wrapper target only.
+        .package(path: "../mlx-engine-swift"),
     ],
     targets: [
         .target(
@@ -36,6 +40,20 @@ let package = Package(
                 .product(name: "Lens", package: "lens-mlx-swift"),
             ],
             path: "Sources/ErnieImage"
+        ),
+        .target(
+            name: "MLXErnieImage",
+            dependencies: [
+                "ErnieImage",
+                .product(name: "Lens", package: "lens-mlx-swift"),
+                .product(name: "MLXToolKit", package: "mlx-engine-swift"),
+            ],
+            path: "Sources/MLXErnieImage"
+        ),
+        .testTarget(
+            name: "MLXErnieImageTests",
+            dependencies: ["MLXErnieImage"],
+            path: "Tests/MLXErnieImageTests"
         ),
         .testTarget(
             name: "ErnieImageTests",

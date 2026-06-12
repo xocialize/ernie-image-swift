@@ -67,3 +67,64 @@ public enum ErnieImageWeights {
         eval(model)
     }
 }
+
+// MARK: - Quantized repos (4-bit lower-tier variant)
+
+extension ErnieImageWeights {
+    /// Quantize every Linear except the quality-sensitive glue (modulation, time
+    /// embedding, final projection, patch embed for the DiT; nothing excluded in the
+    /// text encoder except the embedding, which stays a non-Linear module anyway).
+    static let ditKeepHi = ["adaLN_modulation", "time_embedding", "final_norm_linear",
+                            "final_linear", "x_embedder_proj", "text_proj"]
+
+    /// Convert a loaded model's Linears to 4-bit and save (flattened params +
+    /// quantization config) in `directory`.
+    public static func saveQuantized(
+        model: Module, directory: URL, groupSize: Int = 64, bits: Int = 4,
+        keepHi: [String] = []
+    ) throws {
+        quantize(model: model, groupSize: groupSize, bits: bits) { path, module in
+            guard module is Linear else { return false }
+            return !keepHi.contains { path.contains($0) }
+        }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let flat = Dictionary(uniqueKeysWithValues: model.parameters().flattened())
+        try MLX.save(arrays: flat, url: directory.appendingPathComponent("weights.safetensors"))
+        let config: [String: Any] = [
+            "quantization": ["group_size": groupSize, "bits": bits, "keep_hi": keepHi]
+        ]
+        try JSONSerialization.data(withJSONObject: config, options: [.prettyPrinted])
+            .write(to: directory.appendingPathComponent("config.json"))
+    }
+
+    static func loadQuantizedRepo(model: Module, directory: URL, label: String) throws {
+        let configData = try Data(contentsOf: directory.appendingPathComponent("config.json"))
+        guard let cfg = try JSONSerialization.jsonObject(with: configData) as? [String: Any],
+              let q = cfg["quantization"] as? [String: Any],
+              let groupSize = q["group_size"] as? Int, let bits = q["bits"] as? Int
+        else { throw ErnieImageError.loading("\(label): unreadable quantization config") }
+        let keepHi = (q["keep_hi"] as? [String]) ?? []
+        let weights = try MLX.loadArrays(
+            url: directory.appendingPathComponent("weights.safetensors"))
+        quantize(model: model, groupSize: groupSize, bits: bits) { path, module in
+            guard module is Linear else { return false }
+            guard weights["\(path).scales"] != nil else { return false }
+            return !keepHi.contains { path.contains($0) }
+        }
+        try verifyAndLoad(model: model, weights: weights, label: label)
+    }
+
+    /// Load the DiT from a converted 4-bit repo (`transformer-4bit/`).
+    public static func loadDiTQuantized(directory: URL) throws -> ErnieImageTransformer2DModel {
+        let model = ErnieImageTransformer2DModel()
+        try loadQuantizedRepo(model: model, directory: directory, label: "ErnieDiT(4bit)")
+        return model
+    }
+
+    /// Load the text encoder from a converted 4-bit repo (`text_encoder-4bit/`).
+    public static func loadTextEncoderQuantized(directory: URL) throws -> ErnieTextEncoder {
+        let model = ErnieTextEncoder()
+        try loadQuantizedRepo(model: model, directory: directory, label: "ErnieTextEncoder(4bit)")
+        return model
+    }
+}

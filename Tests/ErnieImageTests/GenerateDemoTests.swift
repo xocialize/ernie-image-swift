@@ -40,6 +40,11 @@ final class GenerateDemoTests: XCTestCase {
 
         let out = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Desktop/ernie-swift-demo.png")
+        try Self.writePNGHelper(pixels: pixels, width: w, height: h, to: out)
+        print("saved \(out.path)")
+    }
+
+    static func writePNGHelper(pixels: [UInt8], width w: Int, height h: Int, to out: URL) throws {
         let cs = CGColorSpace(name: CGColorSpace.sRGB)!
         let ctx = CGContext(
             data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
@@ -55,6 +60,5 @@ final class GenerateDemoTests: XCTestCase {
             out as CFURL, UTType.png.identifier as CFString, 1, nil)!
         CGImageDestinationAddImage(dest, ctx.makeImage()!, nil)
         XCTAssertTrue(CGImageDestinationFinalize(dest))
-        print("saved \(out.path)")
     }
 }
