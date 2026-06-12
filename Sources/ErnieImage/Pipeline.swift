@@ -3,10 +3,9 @@
 // -> bn de-norm + unpatchify + Flux2 decode (Lens decodePackedLatents).
 
 import Foundation
-import Lens
+import Flux2VAE
 import MLX
 import MLXRandom
-import Foundation
 import Tokenizers
 
 public final class ErnieImageGenerator {

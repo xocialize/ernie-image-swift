@@ -10,7 +10,7 @@
 import CoreGraphics
 import Foundation
 import ImageIO
-import Lens
+import Flux2VAE
 import MLX
 import MLXToolKit
 import ErnieImage
@@ -121,7 +121,7 @@ public final class ErnieImagePackage: ModelPackage {
         }
         // bf16 VAE decode matches the Python reference's internal regime and halves
         // the decode high-water vs fp32.
-        let vae = try LensWeights.loadVAE(
+        let vae = try Flux2VAEWeights.loadVAE(
             directory: snapshot.appendingPathComponent("vae"), dtype: .bfloat16)
         let tokenizer = try await AutoTokenizer.from(
             modelFolder: snapshot.appendingPathComponent("tokenizer"))
