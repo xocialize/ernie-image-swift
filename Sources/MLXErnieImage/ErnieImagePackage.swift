@@ -182,3 +182,10 @@ public final class ErnieImagePackage: ModelPackage {
         return out as Data
     }
 }
+
+extension ErnieImagePackage {
+    /// The author one-liner the engine registers.
+    public nonisolated static var registration: PackageRegistration {
+        .of(ErnieImagePackage.self)
+    }
+}
