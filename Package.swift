@@ -22,9 +22,8 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/ml-explore/mlx-swift.git", from: "0.30.0"),
         .package(url: "https://github.com/huggingface/swift-transformers", from: "1.1.6"),
-        // Flux2VAE (decoder) — neutral shared package (was reached through lens-mlx-swift; now
-        // a standalone dep so ERNIE no longer depends on the Lens model package).
-        .package(path: "../flux2-vae-mlx-swift"),
+        // Flux2VAE (decoder) — neutral shared package (no longer via the Lens model package); net dep.
+        .package(url: "https://github.com/xocialize/flux2-vae-mlx-swift", from: "0.1.0"),
         // MLXEngine contract (MLXToolKit) for the wrapper target only.
         .package(path: "../mlx-engine-swift"),
     ],
