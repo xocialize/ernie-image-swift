@@ -5,9 +5,9 @@ A Swift/MLX port of [baidu/ERNIE-Image-Turbo](https://huggingface.co/baidu/ERNIE
 fast, vivid 1024²-class generation at a fraction of the full-tier footprint.
 
 - **`ErnieImage`** — the standalone inference port: 8B single-stream DiT (8 steps, guidance 1.0,
-  no CFG) + Mistral-3B text encoder (second-to-last hidden, YaRN rope factor 16) + **Flux2VAE
-  reused verbatim from [lens-mlx-swift](https://github.com/xocialize/lens-mlx-swift)**
-  (parity-locked ~120 dB). Reference = diffusers 0.38 `ErnieImagePipeline` + mflux (MLX).
+  no CFG) + Mistral-3B text encoder (second-to-last hidden, YaRN rope factor 16) + **Flux2VAE from
+  the neutral [flux2-vae-mlx-swift](https://github.com/xocialize/flux2-vae-mlx-swift) package**
+  (shared with Lens, parity-locked ~120 dB). Reference = diffusers 0.38 `ErnieImagePipeline` + mflux (MLX).
 - **`MLXErnieImage`** — the thin MLXEngine wrapper (`ErnieImagePackage`, PackageID
   `ernie-image-turbo`): the canonical `T2IRequest`/`T2IResponse` surface, license declaration,
   requirements manifest, and PNG artifact encoding. The **second `textToImage` backer** alongside
@@ -46,10 +46,14 @@ an `llm` package) to expand a brief prompt before rendering — the enhancer is 
 
 ## Status / consuming this package
 
-Weights are **not yet on the Hub** — load from a local ERNIE-Image-Turbo snapshot (set
-`snapshotPath`/`quantizedPath`). The package depends on **`lens-mlx-swift`** (Flux2VAE) and
-**`mlx-engine-swift`** (the `MLXToolKit` contract) via local sibling paths
-(`.package(path: "../…")`), so it is **in-workspace dev only** until those siblings are public
-(Lens publication pending). Clone all three as siblings to build.
+The **MLX-converted** weights are not yet on the Hub (the PyTorch source `baidu/ERNIE-Image-Turbo`
+is; these wrappers need MLX weights and do **not** download — they read a local snapshot) — set
+`snapshotPath`/`quantizedPath`). The package itself is public + version-tagged on
+github.com/xocialize: add by tagged URL
+`.package(url: "https://github.com/xocialize/ernie-image-swift", from: "0.1.0")`. It consumes the
+neutral **`flux2-vae-mlx-swift`** (FLUX.2 VAE, shared with Lens — **not** a dependency on lens; the
+VAE was extracted into its own package per the no-model-package-depends-on-another rule) and the
+engine contract **`mlx-engine-swift`** (`MLXToolKit`) as tagged-URL net dependencies, so it builds
+standalone with no local sibling checkouts.
 
 Apache-2.0 (weights) · MIT (port code).
