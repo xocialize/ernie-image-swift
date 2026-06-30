@@ -1,5 +1,5 @@
 {
-  "originHash" : "552c29e4766061ea1881c6e250e9f3fd529124268d4b365aadb3fadd353604e5",
+  "originHash" : "7e551557148821849fb32fcab92bc5529a4168e33ad735fdb7c184ba53153acd",
   "pins" : [
     {
       "identity" : "eventsource",
@@ -11,21 +11,30 @@
       }
     },
     {
+      "identity" : "flux2-vae-mlx-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/xocialize/flux2-vae-mlx-swift",
+      "state" : {
+        "revision" : "889223384f656efa481fd8e726dcffb3681554ef",
+        "version" : "0.1.0"
+      }
+    },
+    {
+      "identity" : "mlx-engine-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/xocialize/mlx-engine-swift",
+      "state" : {
+        "revision" : "c0bdd97e1a164b4039b2242bb0582f4b70ba04b8",
+        "version" : "0.16.0"
+      }
+    },
+    {
       "identity" : "mlx-swift",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/ml-explore/mlx-swift.git",
       "state" : {
         "revision" : "dc43e62d7055353c7f99fa071a4e71d29dfddc44",
         "version" : "0.31.4"
-      }
-    },
-    {
-      "identity" : "mlx-swift-lm",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/ml-explore/mlx-swift-lm.git",
-      "state" : {
-        "revision" : "1c05248bb0899e2a7a4962b84d319cf12f4e12aa",
-        "version" : "3.31.3"
       }
     },
     {
@@ -98,15 +107,6 @@
       "state" : {
         "revision" : "0c0290ff6b24942dadb83a929ffaaa1481df04a2",
         "version" : "1.1.1"
-      }
-    },
-    {
-      "identity" : "swift-syntax",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/swiftlang/swift-syntax.git",
-      "state" : {
-        "revision" : "0687f71944021d616d34d922343dcef086855920",
-        "version" : "600.0.1"
       }
     },
     {

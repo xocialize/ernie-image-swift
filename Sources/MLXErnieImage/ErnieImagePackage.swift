@@ -18,7 +18,7 @@ import Tokenizers
 import UniformTypeIdentifiers
 
 /// Init-time configuration (C9): the Turbo snapshot root + generation defaults.
-public struct ErnieImageConfiguration: PackageConfiguration, ModelStorable {
+public struct ErnieImageConfiguration: PackageConfiguration, ModelStorable, QuantConfigured {
     /// Snapshot root with `transformer/`, `text_encoder/`, `vae/`, `tokenizer/`.
     public var snapshotPath: String
     /// Converted 4-bit repo root (`transformer-4bit/`, `text_encoder-4bit/`); when set,
@@ -26,6 +26,12 @@ public struct ErnieImageConfiguration: PackageConfiguration, ModelStorable {
     public var quantizedPath: String?
     public var defaultSteps: Int
     public var modelsRootDirectory: URL?
+
+    /// The selected DiT tier: int4 when the quantized stack is configured, else bf16. Lets
+    /// the memory governor charge the matching split `QuantFootprint` rather than guessing
+    /// largest-that-fits. The Mistral-3B encoder is a per-request transient (evicted before
+    /// the denoise peak — see the generator), not part of the resident floor.
+    public var quant: Quant { quantizedPath != nil ? .int4 : .bf16 }
 
     public init(
         snapshotPath: String =
@@ -65,14 +71,31 @@ public final class ErnieImagePackage: ModelPackage {
             provenance: Provenance(
                 sourceRepo: "baidu/ERNIE-Image-Turbo", revision: "main", tier: 1),
             requirements: RequirementsManifest(
-                // Measured (1024², 8 steps, bf16 VAE decode): bf16 resident ~22 GB;
-                // int4 resident 7.4 GB / peak 15.0 GB @1024² (decode conv scratch
-                // dominates; tiled decode tracked) / peak 9.4 GB @512² — the 16 GB tier
-                // runs the 4-bit variant at ≤640². Governor charges the largest
-                // footprint that fits (conservative).
+                // Split footprint (efficiency contract 1.14.0). Per-stage eviction (P2):
+                // the Mistral-3B text encoder loads per request and is evicted (`nil` +
+                // Memory.clearCache()) before the denoise peak — a TRANSIENT, not a
+                // resident, in BOTH tiers. Only the 8B DiT + bf16 VAE stay resident.
+                //   bf16: resident floor = DiT bf16 15 GB (on-disk) + bf16 VAE ~0.1 GB
+                //     ≈ 15 GB. activation ≈ 11 GB = the transient encoder load (7.2 GB on
+                //     disk) + DiT denoise/VAE-decode scratch (old flat 26 GB folded the
+                //     encoder into the resident floor).
+                //   int4: resident floor = int4 DiT ~4 GB (keep-hi linears stay bf16) +
+                //     bf16 VAE ~0.1 GB ≈ 5 GB (encoder int4 ~1.8 GB is now a transient,
+                //     not co-resident); inference peak 15.0 GB @1024² (decode conv scratch
+                //     dominates; tiled decode tracked) → activation ≈ 11 GB. 9.4 GB peak
+                //     @512² — the 16 GB tier runs the 4-bit variant at ≤640².
+                // [residentBytes = measured on-disk weight floor (solid). peakActivationBytes
+                //  is a smoke/derived estimate (encoder transient + the documented pre-split
+                //  peak − floor); the smoke MLX-peak under-reads process phys_footprint ~2.7×
+                //  (BiRefNet lesson) — FLAGGED for a clean in-app phys re-baseline once ERNIE
+                //  is registered in the MLXEngineImage app (IMAGE_AUTORUN).]
                 footprints: [
-                    QuantFootprint(quant: .bf16, residentBytes: 26_000_000_000),
-                    QuantFootprint(quant: .int4, residentBytes: 16_000_000_000),
+                    QuantFootprint(
+                        quant: .bf16, residentBytes: 15_000_000_000,
+                        peakActivationBytes: 11_000_000_000),
+                    QuantFootprint(
+                        quant: .int4, residentBytes: 5_000_000_000,
+                        peakActivationBytes: 11_000_000_000),
                 ],
                 requiredBackends: [.metalGPU],
                 os: OSRequirement(minMacOS: SemanticVersion(major: 26, minor: 0, patch: 0)),
@@ -105,19 +128,27 @@ public final class ErnieImagePackage: ModelPackage {
             atPath: snapshot.appendingPathComponent("transformer").path)
         else { throw ErnieImagePackageError.unreadableSnapshot(snapshot.path) }
 
-        let encoder: ErnieTextEncoder
+        // Per-stage residency (efficiency contract 1.14.0): the DiT + VAE stay resident;
+        // the Mistral-3B text encoder is loaded per request and evicted before the denoise
+        // peak (see ErnieImageGenerator). The encoder loader is captured as a closure so the
+        // ~6 GB encoder is never co-resident with the DiT denoise activation peak.
         let transformer: ErnieImageTransformer2DModel
+        let encoderProvider: () async throws -> ErnieTextEncoder
         if let quantizedPath = configuration.quantizedPath {
             let q4 = URL(fileURLWithPath: quantizedPath)
-            encoder = try ErnieImageWeights.loadTextEncoderQuantized(
-                directory: q4.appendingPathComponent("text_encoder-4bit"))
             transformer = try ErnieImageWeights.loadDiTQuantized(
                 directory: q4.appendingPathComponent("transformer-4bit"))
+            let encDir = q4.appendingPathComponent("text_encoder-4bit")
+            encoderProvider = {
+                try ErnieImageWeights.loadTextEncoderQuantized(directory: encDir)
+            }
         } else {
-            encoder = try ErnieImageWeights.loadTextEncoder(
-                directory: snapshot.appendingPathComponent("text_encoder"))
             transformer = try ErnieImageWeights.loadDiTFromPT(
                 directory: snapshot.appendingPathComponent("transformer"))
+            let encDir = snapshot.appendingPathComponent("text_encoder")
+            encoderProvider = {
+                try ErnieImageWeights.loadTextEncoder(directory: encDir)
+            }
         }
         // bf16 VAE decode matches the Python reference's internal regime and halves
         // the decode high-water vs fp32.
@@ -126,11 +157,13 @@ public final class ErnieImagePackage: ModelPackage {
         let tokenizer = try await AutoTokenizer.from(
             modelFolder: snapshot.appendingPathComponent("tokenizer"))
         generator = ErnieImageGenerator(
-            encoder: encoder, transformer: transformer, vae: vae, tokenizer: tokenizer)
+            encoderProvider: encoderProvider, transformer: transformer,
+            vae: vae, tokenizer: tokenizer)
     }
 
     public func unload() async {
         generator = nil
+        MLX.Memory.clearCache()  // release the retained MLX pool so eviction frees RSS (not just drop refs)
     }
 
     public func run(_ request: any CapabilityRequest) async throws -> any CapabilityResponse {
@@ -144,7 +177,7 @@ public final class ErnieImagePackage: ModelPackage {
         // Dimensions must be /16 (the released buckets are 1024² + six aspects).
         let width = ((t2i.width ?? 1024) / 16) * 16
         let height = ((t2i.height ?? 1024) / 16) * 16
-        let (pixels, w, h) = try generator.generate(
+        let (pixels, w, h) = try await generator.generate(
             prompt: t2i.prompt,
             width: width,
             height: height,

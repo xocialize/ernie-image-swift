@@ -45,6 +45,9 @@ let package = Package(
             name: "MLXErnieImage",
             dependencies: [
                 "ErnieImage",
+                // Explicit MLX link so the wrapper's unload() can call MLX.Memory.clearCache()
+                // (the eviction-frees-RSS rule) without relying on a transitive import.
+                .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "Flux2VAE", package: "flux2-vae-mlx-swift"),
                 .product(name: "MLXToolKit", package: "mlx-engine-swift"),
             ],

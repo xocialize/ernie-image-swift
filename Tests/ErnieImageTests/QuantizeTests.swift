@@ -56,7 +56,7 @@ final class QuantizeTests: XCTestCase {
 
         let size = Int(ProcessInfo.processInfo.environment["ERNIE_Q4_SIZE"] ?? "1024") ?? 1024
         let start = Date()
-        let (pixels, w, h) = try generator.generate(
+        let (pixels, w, h) = try await generator.generate(
             prompt: "A red fox standing in tall golden grass at sunset, photorealistic wildlife photography",
             width: size, height: size,
             steps: 8, seed: 42)

@@ -32,7 +32,7 @@ final class GenerateDemoTests: XCTestCase {
             encoder: encoder, transformer: transformer, vae: vae, tokenizer: tokenizer)
 
         let start = Date()
-        let (pixels, w, h) = try generator.generate(
+        let (pixels, w, h) = try await generator.generate(
             prompt: "A red fox standing in tall golden grass at sunset, photorealistic wildlife photography",
             steps: 8, seed: 42,
             progress: { s, t in print("step \(s)/\(t)") })
