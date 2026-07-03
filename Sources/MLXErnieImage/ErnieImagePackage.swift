@@ -12,6 +12,7 @@ import Foundation
 import ImageIO
 import Flux2VAE
 import MLX
+import MLXProfiling
 import MLXToolKit
 import ErnieImage
 import Tokenizers
@@ -177,13 +178,20 @@ public final class ErnieImagePackage: ModelPackage {
         // Dimensions must be /16 (the released buckets are 1024² + six aspects).
         let width = ((t2i.width ?? 1024) / 16) * 16
         let height = ((t2i.height ?? 1024) / 16) * 16
+        let steps = t2i.steps ?? configuration.defaultSteps
+
+        // Profiled run (MLX_PROFILE=1): encode / per-step denoise / vae-decode spans live
+        // in the core generator; the summary normalizes to ms/step.
+        let prof = MLXProfiler.shared
+        prof.beginRun("ernie imageGenerate steps=\(steps) \(width)x\(height)")
         let (pixels, w, h) = try await generator.generate(
             prompt: t2i.prompt,
             width: width,
             height: height,
-            steps: t2i.steps ?? configuration.defaultSteps,
+            steps: steps,
             seed: t2i.seed ?? 0,
             progress: nil)
+        prof.endRun(denominators: ["step": Double(steps)])
 
         try Task.checkCancellation()
         let png = try Self.encodePNG(pixels: pixels, width: w, height: h)

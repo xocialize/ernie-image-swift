@@ -5,6 +5,7 @@
 import Foundation
 import Flux2VAE
 import MLX
+import MLXProfiling
 import MLXRandom
 import Tokenizers
 
@@ -89,14 +90,21 @@ public final class ErnieImageGenerator {
         progress: ((Int, Int) -> Void)? = nil,
         isolation: isolated (any Actor)? = #isolation
     ) async throws -> (pixels: [UInt8], width: Int, height: Int) {
+        let prof = MLXProfiler.shared
+
         // PER-STAGE EVICTION: load the Mistral-3B encoder, encode, force-materialize the
         // text features (`eval`), then drop the encoder + clear the cache BEFORE the denoise
         // loop so the ~6 GB encoder is not co-resident with the DiT activation peak.
+        // The span covers load+encode (the existing `eval(text)` bounds it) — per-request
+        // reload cost is part of the encode stage under the evict-between-stages policy.
+        let eSpan = prof.begin("encode", "mistral",
+                               note: keepEncoderResident ? "resident" : "load+evict")
         var encoderRef: ErnieTextEncoder? = try await loadEncoder()
         let ids = tokenizer.encode(text: prompt)
         let inputIds = MLXArray(ids.map { Int32($0) }).expandedDimensions(axis: 0)
         let text = encoderRef!(inputIds)
         eval(text)              // materialize off the encoder graph
+        prof.end(eSpan)
         evictEncoder(&encoderRef)  // reclaim the ~6 GB before the DiT denoise peak
         let dtype = text.dtype
 
@@ -106,10 +114,13 @@ public final class ErnieImageGenerator {
 
         let sigmas = ErnieScheduler.sigmas(steps: steps)
         for i in 0..<steps {
+            // The loop's existing per-step `eval(latents)` bounds each span honestly.
+            let span = prof.begin("denoise", "step", index: i)
             let t = MLXArray([sigmas[i] * ErnieScheduler.numTrainTimesteps])
             let pred = transformer(hiddenStates: latents, timestep: t, text: text)
             latents = latents + (sigmas[i + 1] - sigmas[i]) * pred
             eval(latents)
+            prof.end(span)
             progress?(i + 1, steps)
         }
 
@@ -123,6 +134,9 @@ public final class ErnieImageGenerator {
         // internally) and cuts the decode high-water ~2x vs fp32 — the lever that
         // fits the 4-bit variant on lower-tier working sets. bn de-norm stays fp32
         // inside the VAE (loadVAE pins bn stats fp32).
+        // decodePackedLatents is lazy — the span runs to the existing `eval(hwc)`,
+        // which realizes decode + the cheap clip/uint8/transpose tail.
+        let vSpan = prof.begin("vae-decode", "decode", note: "\(width)x\(height)")
         let decoded = vae.decodePackedLatents(latents)  // (B,3,H,W)
         if ProcessInfo.processInfo.environment["ERNIE_MEM_TRACE"] == "1" {
             eval(decoded)
@@ -131,6 +145,7 @@ public final class ErnieImageGenerator {
         let img = clip((decoded + 1) * 127.5, min: 0, max: 255).asType(.uint8)
         let hwc = img[0].transposed(1, 2, 0)
         eval(hwc)
+        prof.end(vSpan)
         return (hwc.asArray(UInt8.self), width, height)
     }
 }
