@@ -168,11 +168,15 @@ public final class ErnieImagePackage: ModelPackage {
     }
 
     public func run(_ request: any CapabilityRequest) async throws -> any CapabilityResponse {
+        // CAN-1: the entry checkpoint is the FIRST act of run() — before notLoaded validation
+        // (engine ≥ 0.27.0). Mid-run cadence lives in the core (ErnieImageGenerator.generate:
+        // post-encode seam, per-denoise-step checkpoint, pre-decode seam — all
+        // `try Task.checkCancellation()`, rethrown unchanged through this throwing seam).
+        try Task.checkCancellation()
         guard let generator else { throw PackageError.notLoaded }
         guard request.capability == .textToImage, let t2i = request as? T2IRequest else {
             throw PackageError.unsupportedCapability(request.capability)
         }
-        try Task.checkCancellation()
 
         // Turbo is distilled at guidance 1.0 — no CFG path; guidanceScale is ignored.
         // Dimensions must be /16 (the released buckets are 1024² + six aspects).

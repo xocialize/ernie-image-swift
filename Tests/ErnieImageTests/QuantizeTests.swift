@@ -4,7 +4,7 @@
 // Render:  ERNIE_Q4_DEMO=1 swift test --filter QuantizeTests/testQuantizedDemo
 
 import Foundation
-import Lens
+import Flux2VAE
 import MLX
 import Tokenizers
 import XCTest
@@ -45,7 +45,7 @@ final class QuantizeTests: XCTestCase {
             directory: Self.q4Dir.appendingPathComponent("text_encoder-4bit"))
         let transformer = try ErnieImageWeights.loadDiTQuantized(
             directory: Self.q4Dir.appendingPathComponent("transformer-4bit"))
-        let vae = try LensWeights.loadVAE(
+        let vae = try Flux2VAEWeights.loadVAE(
             directory: Self.modelDir.appendingPathComponent("vae"), dtype: .bfloat16)
         let tokenizer = try await AutoTokenizer.from(
             modelFolder: Self.modelDir.appendingPathComponent("tokenizer"))

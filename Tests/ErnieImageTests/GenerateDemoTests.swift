@@ -4,7 +4,7 @@
 import CoreGraphics
 import Foundation
 import ImageIO
-import Lens
+import Flux2VAE
 import MLX
 import Tokenizers
 import UniformTypeIdentifiers
@@ -24,8 +24,8 @@ final class GenerateDemoTests: XCTestCase {
             directory: modelDir.appendingPathComponent("text_encoder"))
         let transformer = try ErnieImageWeights.loadDiTFromPT(
             directory: modelDir.appendingPathComponent("transformer"))
-        let vae = try LensWeights.loadVAE(
-            directory: modelDir.appendingPathComponent("vae"))
+        let vae = try Flux2VAEWeights.loadVAE(
+            directory: modelDir.appendingPathComponent("vae"), dtype: .bfloat16)
         let tokenizer = try await AutoTokenizer.from(
             modelFolder: modelDir.appendingPathComponent("tokenizer"))
         let generator = ErnieImageGenerator(

@@ -106,6 +106,8 @@ public final class ErnieImageGenerator {
         eval(text)              // materialize off the encoder graph
         prof.end(eSpan)
         evictEncoder(&encoderRef)  // reclaim the ~6 GB before the DiT denoise peak
+        // CAN seam: prompt encoding done (encoder evicted), before the denoise loop.
+        try Task.checkCancellation()
         let dtype = text.dtype
 
         let (lh, lw) = (height / 16, width / 16)
@@ -114,6 +116,9 @@ public final class ErnieImageGenerator {
 
         let sigmas = ErnieScheduler.sigmas(steps: steps)
         for i in 0..<steps {
+            // CAN cadence: cooperative cancellation once per denoise step (throwing seam —
+            // the CancellationError unwinds unchanged to the engine wrapper's run()).
+            try Task.checkCancellation()
             // The loop's existing per-step `eval(latents)` bounds each span honestly.
             let span = prof.begin("denoise", "step", index: i)
             let t = MLXArray([sigmas[i] * ErnieScheduler.numTrainTimesteps])
@@ -123,6 +128,9 @@ public final class ErnieImageGenerator {
             prof.end(span)
             progress?(i + 1, steps)
         }
+
+        // CAN seam: denoise done, before the monolithic VAE decode (one MLX eval).
+        try Task.checkCancellation()
 
         // Lens Flux2VAE: bn de-norm in packed space + unpatchify + decode.
         if ProcessInfo.processInfo.environment["ERNIE_MEM_TRACE"] == "1" {

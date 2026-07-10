@@ -6,7 +6,7 @@
 // Run: ERNIE_PARITY=1 swift test --filter VAEGateTests
 
 import Foundation
-import Lens
+import Flux2VAE
 import MLX
 import XCTest
 
@@ -24,7 +24,7 @@ final class VAEGateTests: XCTestCase {
                 "/Volumes/DEV_VOL1/VideoResearch/ernie-image-models/ERNIE-Image-Turbo")
 
         let gold = try MLX.loadArrays(url: goldens.appendingPathComponent("vae_decode.safetensors"))
-        let vae = try LensWeights.loadVAE(directory: modelDir.appendingPathComponent("vae"))
+        let vae = try Flux2VAEWeights.loadVAE(directory: modelDir.appendingPathComponent("vae"))
 
         // The golden was produced from PACKED latents; decodePackedLatents does the
         // bn de-norm + unpatchify + decode in one move. Feed the raw packed noise.
