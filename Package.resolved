@@ -1,5 +1,5 @@
 {
-  "originHash" : "3489fe3ceff127d3f8a634a2f9ddb8f86e308b3a8c4dc9a6b908eefae475c876",
+  "originHash" : "5862924c2185a22241307de9531fea3ff0c8481372312f4998818a114eaf60eb",
   "pins" : [
     {
       "identity" : "eventsource",
@@ -15,8 +15,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/xocialize/flux2-vae-mlx-swift",
       "state" : {
-        "revision" : "889223384f656efa481fd8e726dcffb3681554ef",
-        "version" : "0.1.0"
+        "revision" : "d99539f5b40212843addb6f4ce9d392a5d4a0f4a",
+        "version" : "0.2.0"
       }
     },
     {

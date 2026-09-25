@@ -155,6 +155,11 @@ public final class ErnieImagePackage: ModelPackage {
         // the decode high-water vs fp32.
         let vae = try Flux2VAEWeights.loadVAE(
             directory: snapshot.appendingPathComponent("vae"), dtype: .bfloat16)
+        // mlx's Metal conv2d takes a lossy Winograd path for 32 of the decoder's 3×3 convs; in
+        // bf16 it loses ~5.8e-2 relL2 per conv. `.fp32Winograd` runs just those convs in fp32:
+        // decode 48.7 → 56.0 dB vs the PyTorch fp32 golden (max error 22 → 5 of 255 levels) for
+        // +186 ms per 1024² decode (flux2-vae-mlx-swift 0.2.0, README "GPU numerics").
+        vae.convRoute = Flux2VAEConvRoute.environmentOverride ?? .fp32Winograd
         let tokenizer = try await AutoTokenizer.from(
             modelFolder: snapshot.appendingPathComponent("tokenizer"))
         generator = ErnieImageGenerator(

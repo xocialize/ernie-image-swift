@@ -20,6 +20,23 @@ encoder ids exact + YaRN inv_freq exact + hidden 0.9999969 · VAE 64 dB · e2e e
 in-app int4 render is eye-verified at 1024² (~24 s; ~7.4 GB resident / ~15 GB peak on an M-series
 Max). bf16 ≈ 22 GB resident.
 
+### GPU numerics: VAE decode route (2026-09-24)
+
+The bf16 FLUX.2 decoder has 32 3×3 convs inside mlx's Metal Winograd conv2d window. The window
+covers 3×3 convs with stride 1 and groups 1, where C%32 == O%32 == 0, C+O ≥ 256 and N·H·W ≥ 4096.
+In bf16 that path loses about 5.8e-2 relL2 per conv, 35× the bf16 rounding floor.
+
+`ErnieImagePackage` now sets `vae.convRoute = .fp32Winograd`, which runs just those convs in fp32
+(flux2-vae-mlx-swift ≥ 0.2.0). Measured on the Lens 512² golden against its PyTorch fp32 decode:
+
+| Route | PSNR | Max error | Extra decode time at 1024² |
+|---|---|---|---|
+| Before (raw Winograd) | 48.7 dB | 0.17 (22 of 255 levels) | — |
+| `.fp32Winograd` (now) | 56.0 dB | 0.037 (5 levels) | +186 ms |
+| `.conv3d` (for reference) | 57.3 dB | — | +677 ms |
+
+Set `FLUX2VAE_CONV_ROUTE=winograd` to restore the old path for an A/B comparison.
+
 ## Use
 
 ```swift

@@ -23,7 +23,7 @@ let package = Package(
         .package(url: "https://github.com/ml-explore/mlx-swift.git", from: "0.30.0"),
         .package(url: "https://github.com/huggingface/swift-transformers", from: "1.1.6"),
         // Flux2VAE (decoder) — neutral shared package (no longer via the Lens model package); net dep.
-        .package(url: "https://github.com/xocialize/flux2-vae-mlx-swift", from: "0.1.0"),
+        .package(url: "https://github.com/xocialize/flux2-vae-mlx-swift", from: "0.2.0"),
         // MLXEngine contract (MLXToolKit) for the wrapper target only. ≥0.27.0 for the CAN
         // cancellation gate (MLXServeConformance.CancellationConformance).
         .package(url: "https://github.com/xocialize/mlx-engine-swift", from: "0.27.0"),
