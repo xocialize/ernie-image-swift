@@ -10,11 +10,20 @@ import XCTest
 @testable import ErnieImage
 
 final class DiTGateTests: XCTestCase {
+    /// ERNIE_FP32_CPU=1 runs the gate in fp32 on the CPU stream, scoped per test (switching the
+    /// global default device is a no-op once MLX has been used in-process).
+    override func invokeTest() {
+        if ProcessInfo.processInfo.environment["ERNIE_FP32_CPU"] == "1" {
+            withMLXCPU { super.invokeTest() }
+        } else {
+            super.invokeTest()
+        }
+    }
+
     func testStep0() throws {
         try XCTSkipUnless(
             ProcessInfo.processInfo.environment["ERNIE_PARITY"] == "1", "ERNIE_PARITY=1")
         let fp32 = ProcessInfo.processInfo.environment["ERNIE_FP32_CPU"] == "1"
-        if fp32 { Device.setDefault(device: Device(.cpu)) }
         let dtype: DType = fp32 ? .float32 : .bfloat16
 
         let goldens = URL(
