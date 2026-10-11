@@ -62,6 +62,20 @@ public enum ErnieImagePackageError: Error, LocalizedError {
     }
 }
 
+/// Forwards the core's ambient phase events into the engine's `RunProgress` plane (contract
+/// 1.18.0, ENGINE-NEEDS V2; AB-A-0139). The engine binds `RunProgress.sink` as a task-local
+/// around `run()`; the core reports into its own engine-free `ErnieImageProgress` sink, and this
+/// closure joins the two. The core's phase names ARE the canonical `RunPhase` constants, so raw
+/// values forward with no mapping table.
+///
+/// Namespaced rather than inlined so the offline suite can exercise the mapping without weights.
+enum ErnieImageProgressBridge {
+    static let forward: ErnieImageProgress.Sink = { e in
+        RunProgress.report(RunPhase(rawValue: e.phase.rawValue),
+                           step: e.step, totalSteps: e.totalSteps)
+    }
+}
+
 @InferenceActor
 public final class ErnieImagePackage: ModelPackage {
     public typealias Configuration = ErnieImageConfiguration
@@ -177,6 +191,8 @@ public final class ErnieImagePackage: ModelPackage {
         // (engine ≥ 0.27.0). Mid-run cadence lives in the core (ErnieImageGenerator.generate:
         // post-encode seam, per-denoise-step checkpoint, pre-decode seam — all
         // `try Task.checkCancellation()`, rethrown unchanged through this throwing seam).
+        // Progress: the core reports encode → denoise (per step) → decode into
+        // ErnieImageProgress, bound below for exactly this generation; PNG encode is postprocess.
         try Task.checkCancellation()
         guard let generator else { throw PackageError.notLoaded }
         guard request.capability == .textToImage, let t2i = request as? T2IRequest else {
@@ -193,16 +209,21 @@ public final class ErnieImagePackage: ModelPackage {
         // in the core generator; the summary normalizes to ms/step.
         let prof = MLXProfiler.shared
         prof.beginRun("ernie imageGenerate steps=\(steps) \(width)x\(height)")
-        let (pixels, w, h) = try await generator.generate(
-            prompt: t2i.prompt,
-            width: width,
-            height: height,
-            steps: steps,
-            seed: t2i.seed ?? 0,
-            progress: nil)
+        let (pixels, w, h) = try await ErnieImageProgress.$sink.withValue(
+            ErnieImageProgressBridge.forward
+        ) {
+            try await generator.generate(
+                prompt: t2i.prompt,
+                width: width,
+                height: height,
+                steps: steps,
+                seed: t2i.seed ?? 0,
+                progress: nil)
+        }
         prof.endRun(denominators: ["step": Double(steps)])
 
         try Task.checkCancellation()
+        RunProgress.report(.postprocess)
         let png = try Self.encodePNG(pixels: pixels, width: w, height: h)
         return T2IResponse(image: Image(format: .png, data: png, width: w, height: h))
     }

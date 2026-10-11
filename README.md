@@ -61,6 +61,23 @@ tokenizer and VAE are still read from the bf16 `snapshotPath`, so both must be r
 Pair with [ernie-pe-swift](https://github.com/xocialize/ernie-pe-swift) (the ERNIE Prompt Enhancer,
 an `llm` package) to expand a brief prompt before rendering — the enhancer is t2i-agnostic.
 
+## Run-phase progress (v0.2.2, AB-A-0139)
+
+The package reports into the engine's `RunProgress` plane (contract 1.18.0), so a host shows
+`denoise 5/8` instead of an unexplained "running". The phases, in order:
+
+| phase | covers | steps? |
+|---|---|---|
+| `encode` | Mistral-3B conditioning, including the per-request encoder load unless it is kept resident | no |
+| `denoise` | the flow-matching Euler loop: once at loop entry with no step, then after each completed step | **yes** — `step i/N`, 1-based |
+| `decode` | FLUX.2 VAE decode — one eval, so no per-chunk counts | no |
+| `postprocess` | PNG encode (reported by the wrapper, after the model is done) | no |
+
+The core stays engine-free: `ErnieImage` reports into its own `ErnieImageProgress` task-local sink, and
+`MLXErnieImage` forwards those events into `RunProgress` (`ErnieImageProgressBridge`). Nothing bound ⇒ no-op, so the
+CLI and the parity gates run unchanged. A host binds a sink around `engine.run` (contract 1.51.0)
+or reads `engine.runProgress`.
+
 ## Status / consuming this package
 
 The **MLX-converted** weights are not yet on the Hub (the PyTorch source `baidu/ERNIE-Image-Turbo`

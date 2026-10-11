@@ -97,6 +97,7 @@ public final class ErnieImageGenerator {
         // loop so the ~6 GB encoder is not co-resident with the DiT activation peak.
         // The span covers load+encode (the existing `eval(text)` bounds it) — per-request
         // reload cost is part of the encode stage under the evict-between-stages policy.
+        ErnieImageProgress.report(.encode)
         let eSpan = prof.begin("encode", "mistral",
                                note: keepEncoderResident ? "resident" : "load+evict")
         var encoderRef: ErnieTextEncoder? = try await loadEncoder()
@@ -115,6 +116,7 @@ public final class ErnieImageGenerator {
         var latents = MLXRandom.normal([1, 128, lh, lw], key: key).asType(dtype)
 
         let sigmas = ErnieScheduler.sigmas(steps: steps)
+        ErnieImageProgress.report(.denoise)
         for i in 0..<steps {
             // CAN cadence: cooperative cancellation once per denoise step (throwing seam —
             // the CancellationError unwinds unchanged to the engine wrapper's run()).
@@ -126,6 +128,7 @@ public final class ErnieImageGenerator {
             latents = latents + (sigmas[i + 1] - sigmas[i]) * pred
             eval(latents)
             prof.end(span)
+            ErnieImageProgress.report(.denoise, step: i + 1, totalSteps: steps)
             progress?(i + 1, steps)
         }
 
@@ -144,6 +147,7 @@ public final class ErnieImageGenerator {
         // inside the VAE (loadVAE pins bn stats fp32).
         // decodePackedLatents is lazy — the span runs to the existing `eval(hwc)`,
         // which realizes decode + the cheap clip/uint8/transpose tail.
+        ErnieImageProgress.report(.decode)
         let vSpan = prof.begin("vae-decode", "decode", note: "\(width)x\(height)")
         let decoded = vae.decodePackedLatents(latents)  // (B,3,H,W)
         if ProcessInfo.processInfo.environment["ERNIE_MEM_TRACE"] == "1" {

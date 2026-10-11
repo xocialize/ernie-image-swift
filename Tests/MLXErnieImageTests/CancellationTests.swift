@@ -43,7 +43,8 @@ final class CancellationTests: XCTestCase {
                 // Per-denoise-step try Task.checkCancellation() in ErnieImageGenerator
                 // .generate's denoise loop; post-encode + pre-decode seams bracket it
                 // (single forwards — seams, not recurring units).
-                .init(phase: .denoise, unit: .step),
+                // RunProgress-evidenced (AB-A-0139): the same loop seam reports `.denoise` i/N.
+                .init(phase: .denoise, unit: .step, reportsRunProgress: true),
             ]))
         XCTAssertTrue(report.passed, report.summary)
     }
